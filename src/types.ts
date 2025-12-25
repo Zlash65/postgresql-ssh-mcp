@@ -21,6 +21,7 @@ export interface SSHTunnelConfig {
   privateKeyPassphrase?: string;
   password?: string;
   strictHostKey: boolean;
+  trustOnFirstUse: boolean;
   knownHostsPath?: string;
   keepaliveInterval: number;
 }

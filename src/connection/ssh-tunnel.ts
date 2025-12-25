@@ -33,7 +33,10 @@ export class SSHTunnelManager extends EventEmitter {
     super();
 
     if (config.strictHostKey !== false) {
-      this.hostKeyVerifier = new HostKeyVerifier(config.knownHostsPath);
+      this.hostKeyVerifier = new HostKeyVerifier(
+        config.knownHostsPath,
+        config.trustOnFirstUse
+      );
     } else {
       console.error(
         '[SSH] WARNING: Host key verification DISABLED (strictHostKey=false)'
