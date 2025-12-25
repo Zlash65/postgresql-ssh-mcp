@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/Zlash65/postgresql-ssh-mcp/compare/v1.0.0...v1.1.0) (2025-12-25)
+
+### Features
+
+* ssh trust-on-first-use by default with auto-retry ([#2](https://github.com/Zlash65/postgresql-ssh-mcp/issues/2)) ([e6b19b3](https://github.com/Zlash65/postgresql-ssh-mcp/commit/e6b19b343055fc1cfda0af399fd8a2e6649ce029))
+
 ## 1.0.0 (2025-12-25)
 
 ### Features
