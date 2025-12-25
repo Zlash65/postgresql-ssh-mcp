@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ssh:
+    image: lscr.io/linuxserver/openssh-server:latest
+    environment:
+      PUID: "1000"
+      PGID: "1000"
+      TZ: "Etc/UTC"
+      PASSWORD_ACCESS: "true"
+      USER_NAME: "testuser"
+      USER_PASSWORD: "testpass"
+      SUDO_ACCESS: "false"
+    volumes:
+      - ./docker/ssh/sshd_config.d:/config/sshd/sshd_config.d:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tests:
+    build:
+      context: .
+      target: test
+    environment:
+      DATABASE_URI: postgresql://postgres:postgres@postgres:5432/postgres
+      DATABASE_SSL: "false"
+      SSH_ENABLED: "true"
+      SSH_HOST: "ssh"
+      SSH_PORT: "2222"
+      SSH_USER: "testuser"
+      SSH_PASSWORD: "testpass"
+      SSH_STRICT_HOST_KEY: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ssh:
+        condition: service_started
