@@ -1,6 +1,6 @@
 {
   "name": "@zlash65/postgresql-ssh-mcp",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "PostgreSQL MCP Server with built-in SSH tunneling for secure database access through bastion hosts",
   "type": "module",
   "main": "dist/index.js",
