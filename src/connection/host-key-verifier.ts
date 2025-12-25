@@ -7,10 +7,12 @@ import type { KnownHost, HostKeyVerificationResult } from '../types.js';
 export class HostKeyVerifier {
   private knownHosts: Map<string, KnownHost[]> = new Map();
   private knownHostsPath: string;
+  private trustOnFirstUse: boolean;
 
-  constructor(knownHostsPath?: string) {
+  constructor(knownHostsPath?: string, trustOnFirstUse: boolean = true) {
     this.knownHostsPath =
       knownHostsPath || path.join(os.homedir(), '.ssh', 'known_hosts');
+    this.trustOnFirstUse = trustOnFirstUse;
     this.loadKnownHosts();
   }
 
@@ -31,7 +33,6 @@ export class HostKeyVerifier {
         if (!trimmed || trimmed.startsWith('#')) continue;
 
         if (trimmed.startsWith('@')) {
-          console.error(`[SSH] Skipping known_hosts marker line: ${trimmed.slice(0, 50)}...`);
           continue;
         }
 
@@ -107,6 +108,41 @@ export class HostKeyVerifier {
     return results;
   }
 
+  private addKnownHost(
+    hostname: string,
+    keyType: string,
+    publicKeyBase64: string
+  ): boolean {
+    try {
+      const dir = path.dirname(this.knownHostsPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+
+      const line = `${hostname} ${keyType} ${publicKeyBase64}\n`;
+      fs.appendFileSync(this.knownHostsPath, line, 'utf8');
+
+      const normalizedHost = this.normalizeHostname(hostname);
+      if (!this.knownHosts.has(normalizedHost)) {
+        this.knownHosts.set(normalizedHost, []);
+      }
+
+      this.knownHosts.get(normalizedHost)!.push({
+        hostname: normalizedHost,
+        keyType,
+        publicKey: publicKeyBase64,
+      });
+
+      console.error(
+        `[SSH] Added ${hostname} to known_hosts (${this.knownHostsPath})`
+      );
+      return true;
+    } catch (error) {
+      console.error(`[SSH] Failed to write known_hosts: ${error}`);
+      return false;
+    }
+  }
+
   verifyHostKey(
     hostname: string,
     port: number,
@@ -124,12 +160,28 @@ export class HostKeyVerifier {
 
     if (knownKeys.length === 0) {
       const displayHost = port === 22 ? hostname : `[${hostname}]:${port}`;
+      if (this.trustOnFirstUse) {
+        const publicKeyBase64 = publicKey.toString('base64');
+        const saved = this.addKnownHost(displayHost, keyType, publicKeyBase64);
+        if (saved) {
+          return {
+            verified: true,
+            reason: 'Host key accepted on first use and saved to known_hosts',
+          };
+        }
+        return {
+          verified: false,
+          reason:
+            `FAILED TO SAVE HOST KEY for '${displayHost}'.\n` +
+            `Unable to write to known_hosts at ${this.knownHostsPath}.\n` +
+            `Fix permissions or set SSH_KNOWN_HOSTS_PATH.`,
+        };
+      }
       return {
         verified: false,
         reason:
           `UNKNOWN HOST: '${displayHost}' not found in known_hosts.\n` +
-          `To add it, run: ssh-keyscan -H ${hostname} >> ~/.ssh/known_hosts\n` +
-          `Then restart the MCP server.`,
+          `To add it, run: ssh-keyscan -H ${hostname} >> ~/.ssh/known_hosts`,
       };
     }
 

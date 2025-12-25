@@ -49,6 +49,7 @@ describeIf('SSHTunnelManager integration', () => {
       privateKeyPassphrase: process.env.SSH_PRIVATE_KEY_PASSPHRASE,
       password: process.env.SSH_PASSWORD,
       strictHostKey: process.env.SSH_STRICT_HOST_KEY !== 'false',
+      trustOnFirstUse: process.env.SSH_TRUST_ON_FIRST_USE !== 'false',
       knownHostsPath: process.env.SSH_KNOWN_HOSTS_PATH,
       keepaliveInterval: parseInt(process.env.SSH_KEEPALIVE_INTERVAL || '10000', 10),
     };

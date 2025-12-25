@@ -95,6 +95,8 @@ function parseSSHConfig(): SSHTunnelConfig | undefined {
     );
   }
 
+  const trustOnFirstUse = process.env.SSH_TRUST_ON_FIRST_USE !== 'false';
+
   return {
     host: requireEnv('SSH_HOST'),
     port,
@@ -103,6 +105,7 @@ function parseSSHConfig(): SSHTunnelConfig | undefined {
     privateKeyPassphrase: process.env.SSH_PRIVATE_KEY_PASSPHRASE,
     password,
     strictHostKey: process.env.SSH_STRICT_HOST_KEY !== 'false',
+    trustOnFirstUse,
     knownHostsPath: process.env.SSH_KNOWN_HOSTS_PATH,
     keepaliveInterval,
   };
@@ -144,6 +147,7 @@ export function parseConfig(): ParsedConfig {
       username: ssh.username,
       authMethod: ssh.privateKeyPath ? 'key' : 'password',
       strictHostKey: ssh.strictHostKey,
+      trustOnFirstUse: ssh.trustOnFirstUse,
     });
   }
 
