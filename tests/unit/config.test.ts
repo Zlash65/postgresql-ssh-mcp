@@ -164,6 +164,7 @@ describe('parseConfig', () => {
       expect(config.ssh!.port).toBe(22);
       expect(config.ssh!.username).toBe('ubuntu');
       expect(config.ssh!.password).toBe('sshpass');
+      expect(config.ssh!.trustOnFirstUse).toBe(true);
     });
 
     it('parses SSH config with private key', () => {
@@ -217,6 +218,16 @@ describe('parseConfig', () => {
       process.env.SSH_KEEPALIVE_INTERVAL = '5000';
       const config = parseConfig();
       expect(config.ssh!.keepaliveInterval).toBe(5000);
+    });
+
+    it('parses SSH_TRUST_ON_FIRST_USE=false', () => {
+      process.env.SSH_ENABLED = 'true';
+      process.env.SSH_HOST = 'bastion.example.com';
+      process.env.SSH_USER = 'ubuntu';
+      process.env.SSH_PASSWORD = 'pass';
+      process.env.SSH_TRUST_ON_FIRST_USE = 'false';
+      const config = parseConfig();
+      expect(config.ssh!.trustOnFirstUse).toBe(false);
     });
   });
 

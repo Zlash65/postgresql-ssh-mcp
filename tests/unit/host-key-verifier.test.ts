@@ -10,11 +10,11 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { HostKeyVerifier } from '../../src/connection/host-key-verifier.js';
 
-function writeTempKnownHosts(contents: string): string {
+function writeTempKnownHosts(contents: string): { filePath: string; dir: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'known-hosts-'));
   const filePath = path.join(dir, 'known_hosts');
   fs.writeFileSync(filePath, contents, 'utf8');
-  return filePath;
+  return { filePath, dir };
 }
 
 function makeHashedHostEntry(
@@ -32,25 +32,30 @@ function makeHashedHostEntry(
 
 describe('HostKeyVerifier', () => {
   let tempPath: string;
+  let tempDir: string;
   const keyType = 'ssh-ed25519';
   const keyBuffer = Buffer.from('test-host-key');
   const publicKey = keyBuffer.toString('base64');
 
   afterEach(() => {
-    if (tempPath && fs.existsSync(tempPath)) {
-      fs.rmSync(path.dirname(tempPath), { recursive: true, force: true });
+    if (tempDir && fs.existsSync(tempDir)) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
 
   it('verifies plain hostname match', () => {
-    tempPath = writeTempKnownHosts(`example.com ${keyType} ${publicKey}`);
+    const tmp = writeTempKnownHosts(`example.com ${keyType} ${publicKey}`);
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
     const verifier = new HostKeyVerifier(tempPath);
     const result = verifier.verifyHostKey('example.com', 22, keyType, keyBuffer);
     expect(result.verified).toBe(true);
   });
 
   it('verifies host with non-default port', () => {
-    tempPath = writeTempKnownHosts(`[example.com]:2222 ${keyType} ${publicKey}`);
+    const tmp = writeTempKnownHosts(`[example.com]:2222 ${keyType} ${publicKey}`);
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
     const verifier = new HostKeyVerifier(tempPath);
     const result = verifier.verifyHostKey('example.com', 2222, keyType, keyBuffer);
     expect(result.verified).toBe(true);
@@ -58,22 +63,50 @@ describe('HostKeyVerifier', () => {
 
   it('verifies hashed hostname entry', () => {
     const hashedEntry = makeHashedHostEntry('hashed.example.com', keyType, publicKey);
-    tempPath = writeTempKnownHosts(hashedEntry);
+    const tmp = writeTempKnownHosts(hashedEntry);
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
     const verifier = new HostKeyVerifier(tempPath);
     const result = verifier.verifyHostKey('hashed.example.com', 22, keyType, keyBuffer);
     expect(result.verified).toBe(true);
   });
 
-  it('rejects unknown host', () => {
-    tempPath = writeTempKnownHosts(`known.example.com ${keyType} ${publicKey}`);
+  it('accepts and saves unknown host by default (trust on first use)', () => {
+    const tmp = writeTempKnownHosts('');
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
     const verifier = new HostKeyVerifier(tempPath);
+    const result = verifier.verifyHostKey('unknown.example.com', 22, keyType, keyBuffer);
+    expect(result.verified).toBe(true);
+
+    const updated = fs.readFileSync(tempPath, 'utf8');
+    expect(updated).toMatch(/unknown\.example\.com/);
+    expect(updated).toMatch(new RegExp(`${keyType}\\s+${publicKey}`));
+  });
+
+  it('rejects unknown host when trust on first use is disabled', () => {
+    const tmp = writeTempKnownHosts('');
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
+    const verifier = new HostKeyVerifier(tempPath, false);
     const result = verifier.verifyHostKey('unknown.example.com', 22, keyType, keyBuffer);
     expect(result.verified).toBe(false);
     expect(result.reason).toMatch(/UNKNOWN HOST/);
   });
 
+  it('fails trust on first use when known_hosts is not writable', () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'known-hosts-'));
+    tempPath = tempDir;
+    const verifier = new HostKeyVerifier(tempPath);
+    const result = verifier.verifyHostKey('unknown.example.com', 22, keyType, keyBuffer);
+    expect(result.verified).toBe(false);
+    expect(result.reason).toMatch(/FAILED TO SAVE HOST KEY/);
+  });
+
   it('rejects host key mismatch', () => {
-    tempPath = writeTempKnownHosts(`example.com ${keyType} ${publicKey}`);
+    const tmp = writeTempKnownHosts(`example.com ${keyType} ${publicKey}`);
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
     const verifier = new HostKeyVerifier(tempPath);
     const otherKey = Buffer.from('different-key');
     const result = verifier.verifyHostKey('example.com', 22, keyType, otherKey);
@@ -86,7 +119,9 @@ describe('HostKeyVerifier', () => {
       '@cert-authority *.example.com ssh-ed25519 AAAA',
       'valid.example.com ssh-ed25519 ' + publicKey,
     ].join('\n');
-    tempPath = writeTempKnownHosts(content);
+    const tmp = writeTempKnownHosts(content);
+    tempPath = tmp.filePath;
+    tempDir = tmp.dir;
     const verifier = new HostKeyVerifier(tempPath);
     const result = verifier.verifyHostKey('valid.example.com', 22, keyType, keyBuffer);
     expect(result.verified).toBe(true);
