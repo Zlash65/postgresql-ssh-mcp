@@ -14,4 +14,4 @@ echo "Starting postgres + ssh for integration tests..."
 docker compose -f "${COMPOSE_FILE}" up -d postgres ssh >/dev/null 2>&1
 
 echo "Running tests..."
-docker compose -f "${COMPOSE_FILE}" run --rm --no-deps tests
+docker compose -f "${COMPOSE_FILE}" run --rm --no-deps --build tests
