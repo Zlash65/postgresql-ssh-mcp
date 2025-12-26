@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/Zlash65/postgresql-ssh-mcp/compare/v1.1.0...v1.2.0) (2025-12-26)
+
+### Features
+
+* add Streamable HTTP transport with OAuth support ([#4](https://github.com/Zlash65/postgresql-ssh-mcp/issues/4)) ([6c3297f](https://github.com/Zlash65/postgresql-ssh-mcp/commit/6c3297f3d4be47a73f14892be4b4ec8ed2f20bc3))
+
 ## [1.1.0](https://github.com/Zlash65/postgresql-ssh-mcp/compare/v1.0.0...v1.1.0) (2025-12-25)
 
 ### Features
