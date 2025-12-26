@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from 'pg';
-import * as fs from 'fs';
+import { readFile } from 'node:fs/promises';
 import { SSHTunnelManager } from './ssh-tunnel.js';
 import {
   validateReadOnlyStatement,
@@ -25,9 +25,15 @@ export class ConnectionManager {
   private isReconnecting = false;
   private currentLocalPort: number | null = null;
   private sslEnabled = false;
+  private inFlightQueries = 0;
+  private readonly maxConcurrentQueries: number;
+  private queryWaiters: Array<() => void> = [];
+  private readonly poolDrainTimeoutMs: number;
 
   constructor(config: ParsedConfig) {
     this.config = config;
+    this.maxConcurrentQueries = config.maxConcurrentQueries;
+    this.poolDrainTimeoutMs = config.poolDrainTimeoutMs;
   }
 
   async initialize(): Promise<void> {
@@ -74,10 +80,10 @@ export class ConnectionManager {
     console.error('[DB] Connection manager initialized');
   }
 
-  private resolveSSLConfig(
+  private async resolveSSLConfig(
     preference: SSLPreference,
     originalHost: string
-  ): false | { rejectUnauthorized: boolean; ca?: string } {
+  ): Promise<false | { rejectUnauthorized: boolean; ca?: string }> {
     if (preference.explicit === 'false') {
       console.error('[DB] SSL disabled (explicit configuration)');
       return false;
@@ -87,9 +93,7 @@ export class ConnectionManager {
       console.error('[DB] SSL enabled (explicit configuration)');
       return {
         rejectUnauthorized: preference.rejectUnauthorized,
-        ca: preference.ca
-          ? fs.readFileSync(preference.ca, 'utf8')
-          : undefined,
+        ca: preference.ca ? await readFile(preference.ca, 'utf8') : undefined,
       };
     }
 
@@ -106,7 +110,7 @@ export class ConnectionManager {
     console.error('[DB] SSL enabled by default (non-localhost database)');
     return {
       rejectUnauthorized: preference.rejectUnauthorized,
-      ca: preference.ca ? fs.readFileSync(preference.ca, 'utf8') : undefined,
+      ca: preference.ca ? await readFile(preference.ca, 'utf8') : undefined,
     };
   }
 
@@ -114,7 +118,7 @@ export class ConnectionManager {
     const host = this.tunnelManager ? '127.0.0.1' : this.config.database.host;
     const port = this.currentLocalPort || this.config.database.port;
 
-    const sslConfig = this.resolveSSLConfig(
+    const sslConfig = await this.resolveSSLConfig(
       this.config.sslPreference,
       this.config.database.host
     );
@@ -162,7 +166,10 @@ export class ConnectionManager {
         await Promise.race([
           oldPool.end(),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Pool drain timeout')), 5000)
+            setTimeout(
+              () => reject(new Error('Pool drain timeout')),
+              this.poolDrainTimeoutMs
+            )
           ),
         ]);
         console.error('[DB] Old pool drained');
@@ -189,10 +196,20 @@ export class ConnectionManager {
 
     if (this.config.readOnly) {
       validateReadOnlyStatement(sql);
-      return this.executeReadOnlyQuery(sql, params || []);
+      await this.acquireQuerySlot();
+      try {
+        return await this.executeReadOnlyQuery(sql, params || []);
+      } finally {
+        this.releaseQuerySlot();
+      }
     }
 
-    return this.executeWriteQuery(sql, params || []);
+    await this.acquireQuerySlot();
+    try {
+      return await this.executeWriteQuery(sql, params || []);
+    } finally {
+      this.releaseQuerySlot();
+    }
   }
 
   private async executeReadOnlyQuery(
@@ -389,7 +406,31 @@ export class ConnectionManager {
       mode: this.config.readOnly ? 'read-only' : 'read-write',
       maxRows: this.config.maxRows,
       queryTimeout: this.config.queryTimeout,
+      maxConcurrentQueries: this.maxConcurrentQueries,
+      activeQueries: this.inFlightQueries,
     };
+  }
+
+  private async acquireQuerySlot(): Promise<void> {
+    if (this.inFlightQueries < this.maxConcurrentQueries) {
+      this.inFlightQueries += 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.queryWaiters.push(resolve);
+    });
+
+    this.inFlightQueries += 1;
+  }
+
+  private releaseQuerySlot(): void {
+    this.inFlightQueries = Math.max(0, this.inFlightQueries - 1);
+
+    const next = this.queryWaiters.shift();
+    if (next) {
+      next();
+    }
   }
 
   async close(): Promise<void> {
@@ -407,5 +448,26 @@ export class ConnectionManager {
 
     this.isInitialized = false;
     console.error('[DB] Connection manager closed');
+  }
+
+  /**
+   * Health check - verify database connectivity
+   * @throws Error if database is not reachable
+   */
+  async healthCheck(): Promise<void> {
+    if (!this.pool) {
+      throw new Error('Connection not initialized');
+    }
+
+    if (this.isReconnecting) {
+      throw new Error('Database connection is reconnecting');
+    }
+
+    const client = await this.pool.connect();
+    try {
+      await client.query('SELECT 1');
+    } finally {
+      client.release();
+    }
   }
 }
