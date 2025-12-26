@@ -1,7 +1,145 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ConnectionManager } from '../connection/postgres-pool.js';
-import { successResponse, errorResponseFromError } from '../lib/tool-response.js';
+import {
+  successResponse,
+  errorResponseFromError,
+  wrapToolOutputSchema,
+} from '../lib/tool-response.js';
+
+const NullableNumber = z.union([z.number(), z.string(), z.null()]);
+const TimestampSchema = z.union([z.string(), z.date()]);
+const NullableTimestamp = TimestampSchema.nullable();
+
+const TunnelStateSchema = z
+  .object({
+    status: z.enum([
+      'disconnected',
+      'connecting',
+      'connected',
+      'reconnecting',
+      'failed',
+    ]),
+    localPort: z.number().nullable(),
+    uptime: z.number(),
+    reconnectAttempts: z.number(),
+    lastError: z.string().optional(),
+  })
+  .passthrough();
+
+const ConnectionStatusSchema = z
+  .object({
+    initialized: z.boolean(),
+    reconnecting: z.boolean(),
+    database: z.object({
+      host: z.string(),
+      port: z.number(),
+      database: z.string(),
+      user: z.string(),
+      ssl: z.boolean(),
+    }),
+    tunnel: TunnelStateSchema.optional(),
+    pool: z.object({
+      totalCount: z.number(),
+      idleCount: z.number(),
+      waitingCount: z.number(),
+    }),
+    mode: z.enum(['read-only', 'read-write']),
+    maxRows: z.number(),
+    queryTimeout: z.number(),
+    maxConcurrentQueries: z.number(),
+    activeQueries: z.number(),
+  })
+  .passthrough();
+
+const ActiveConnectionRowSchema = z
+  .object({
+    pid: z.union([z.number(), z.string()]),
+    username: z.string(),
+    application_name: z.string().nullable(),
+    client_addr: z.string().nullable(),
+    state: z.string().nullable(),
+    query_start: NullableTimestamp,
+    query_duration_seconds: NullableNumber,
+    query_preview: z.string().nullable(),
+  })
+  .passthrough();
+
+const LongRunningQueryRowSchema = z
+  .object({
+    pid: z.union([z.number(), z.string()]),
+    username: z.string(),
+    application_name: z.string().nullable(),
+    state: z.string().nullable(),
+    query_start: NullableTimestamp,
+    duration_seconds: NullableNumber,
+    query: z.string().nullable(),
+  })
+  .passthrough();
+
+const DatabaseSizeSchema = z
+  .object({
+    database_size: z.string(),
+    database_name: z.string(),
+  })
+  .passthrough();
+
+const TableSizeSchema = z
+  .object({
+    table_name: z.string(),
+    total_size: z.string(),
+    table_size: z.string(),
+    indexes_size: z.string(),
+  })
+  .passthrough();
+
+const DatabaseSizeResultSchema = z
+  .object({
+    database: DatabaseSizeSchema,
+    largestTables: z.array(TableSizeSchema),
+  })
+  .passthrough();
+
+const TableStatsSchema = z
+  .object({
+    schemaname: z.string(),
+    table_name: z.string(),
+    live_rows: NullableNumber,
+    dead_rows: NullableNumber,
+    rows_modified_since_analyze: NullableNumber,
+    last_vacuum: NullableTimestamp,
+    last_autovacuum: NullableTimestamp,
+    last_analyze: NullableTimestamp,
+    last_autoanalyze: NullableTimestamp,
+    seq_scan: NullableNumber,
+    seq_tup_read: NullableNumber,
+    idx_scan: NullableNumber,
+    idx_tup_fetch: NullableNumber,
+    inserts: NullableNumber,
+    updates: NullableNumber,
+    deletes: NullableNumber,
+  })
+  .passthrough();
+
+const TableStatsResultSchema = z.union([
+  TableStatsSchema,
+  z.object({ error: z.string() }),
+]);
+
+const ConnectionStatusOutputSchema = wrapToolOutputSchema(
+  ConnectionStatusSchema
+);
+const ActiveConnectionsOutputSchema = wrapToolOutputSchema(
+  z.array(ActiveConnectionRowSchema)
+);
+const LongRunningQueriesOutputSchema = wrapToolOutputSchema(
+  z.array(LongRunningQueryRowSchema)
+);
+const DatabaseVersionOutputSchema = wrapToolOutputSchema(z.string());
+const DatabaseSizeOutputSchema = wrapToolOutputSchema(
+  DatabaseSizeResultSchema
+);
+const TableStatsOutputSchema = wrapToolOutputSchema(TableStatsResultSchema);
 
 export function registerAdminTools(
   server: McpServer,
@@ -13,6 +151,7 @@ export function registerAdminTools(
       description:
         'Get connection status, pool stats, and tunnel state.',
       inputSchema: {},
+      outputSchema: ConnectionStatusOutputSchema,
     },
     async () => {
       const status = connectionManager.getStatus();
@@ -32,6 +171,7 @@ export function registerAdminTools(
           .default(false)
           .describe('Include idle connections in the listing'),
       },
+      outputSchema: ActiveConnectionsOutputSchema,
     },
     async ({ includeIdle }) => {
       try {
@@ -76,6 +216,7 @@ export function registerAdminTools(
           .default(5)
           .describe('Minimum duration in seconds (default: 5)'),
       },
+      outputSchema: LongRunningQueriesOutputSchema,
     },
     async ({ minDurationSeconds }) => {
       try {
@@ -111,6 +252,7 @@ export function registerAdminTools(
     {
       description: 'Get PostgreSQL server version.',
       inputSchema: {},
+      outputSchema: DatabaseVersionOutputSchema,
     },
     async () => {
       try {
@@ -133,6 +275,7 @@ export function registerAdminTools(
           .default(10)
           .describe('Number of largest tables to return (default: 10)'),
       },
+      outputSchema: DatabaseSizeOutputSchema,
     },
     async ({ limit }) => {
       try {
@@ -182,6 +325,7 @@ export function registerAdminTools(
           .describe('Schema name (default: public)'),
         table: z.string().describe('Table name'),
       },
+      outputSchema: TableStatsOutputSchema,
     },
     async ({ schema, table }) => {
       try {

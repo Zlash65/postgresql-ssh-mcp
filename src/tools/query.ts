@@ -1,7 +1,26 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ConnectionManager } from '../connection/postgres-pool.js';
-import { successResponse, errorResponseFromError } from '../lib/tool-response.js';
+import {
+  successResponse,
+  errorResponseFromError,
+  wrapToolOutputSchema,
+} from '../lib/tool-response.js';
+
+const QueryFieldSchema = z.object({
+  name: z.string(),
+  dataTypeID: z.number(),
+});
+
+const ExecuteQueryResultSchema = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())),
+  rowCount: z.number(),
+  truncated: z.boolean(),
+  fields: z.array(QueryFieldSchema).optional(),
+});
+
+const ExecuteQueryOutputSchema = wrapToolOutputSchema(ExecuteQueryResultSchema);
+const ExplainQueryOutputSchema = wrapToolOutputSchema(z.string());
 
 export function registerQueryTools(
   server: McpServer,
@@ -15,10 +34,11 @@ export function registerQueryTools(
       inputSchema: {
         sql: z.string().describe('SQL to execute'),
         params: z
-          .array(z.any())
+          .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
           .optional()
           .describe('Parameters for $1, $2, ...'),
       },
+      outputSchema: ExecuteQueryOutputSchema,
     },
     async ({ sql, params }) => {
       try {
@@ -58,6 +78,7 @@ export function registerQueryTools(
           .default('text')
           .describe('Output format for the execution plan'),
       },
+      outputSchema: ExplainQueryOutputSchema,
     },
     async ({ sql, analyze, format }) => {
       try {

@@ -24,6 +24,7 @@ export interface SSHTunnelConfig {
   trustOnFirstUse: boolean;
   knownHostsPath?: string;
   keepaliveInterval: number;
+  maxReconnectAttempts: number;
 }
 
 export interface TunnelTarget {
@@ -53,6 +54,8 @@ export interface ParsedConfig {
   readOnly: boolean;
   queryTimeout: number;
   maxRows: number;
+  maxConcurrentQueries: number;
+  poolDrainTimeoutMs: number;
 }
 
 export interface ConnectionStatus {
@@ -74,6 +77,8 @@ export interface ConnectionStatus {
   mode: 'read-only' | 'read-write';
   maxRows: number;
   queryTimeout: number;
+  maxConcurrentQueries: number;
+  activeQueries: number;
 }
 
 export interface QueryField {
@@ -95,6 +100,7 @@ export interface ToolResponse {
     type: 'text';
     text: string;
   }>;
+  structuredContent?: Record<string, unknown>;
   isError?: boolean;
 }
 
@@ -107,4 +113,26 @@ export interface KnownHost {
 export interface HostKeyVerificationResult {
   verified: boolean;
   reason: string;
+}
+
+export type AuthMode = 'none' | 'oauth';
+
+export interface HttpConfig {
+  port: number;
+  host: string;
+  authMode: AuthMode;
+  auth0Domain?: string;
+  auth0Audience?: string;
+  sessionTtlMinutes: number;
+  stateless: boolean;
+  serverPoolSize: number;
+  sessionCleanupIntervalMs: number;
+  allowedOrigins?: string[];
+  allowedHosts?: string[];
+  resourceDocumentation?: string;
+}
+
+export interface Auth0Config {
+  domain: string;
+  audience: string;
 }

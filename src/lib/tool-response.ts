@@ -1,18 +1,40 @@
+import { z } from 'zod';
 import type { ToolResponse } from '../types.js';
 import { obfuscateConnectionString } from './obfuscate.js';
+
+export const wrapToolOutputSchema = <T extends z.ZodTypeAny>(schema: T) =>
+  z.object({
+    result: schema,
+  });
+
+const formatText = (data: unknown): string => {
+  if (typeof data === 'string') {
+    return data;
+  }
+
+  try {
+    const json = JSON.stringify(data, null, 2);
+    return json ?? String(data);
+  } catch {
+    return String(data);
+  }
+};
 
 export function successResponse(data: unknown): ToolResponse {
   return {
     content: [
       {
         type: 'text',
-        text: typeof data === 'string' ? data : JSON.stringify(data, null, 2),
+        text: formatText(data),
       },
     ],
+    structuredContent: {
+      result: data,
+    },
   };
 }
 
-export function errorResponse(message: string): ToolResponse {
+function errorResponse(message: string): ToolResponse {
   const safeMessage = obfuscateConnectionString(message);
   return {
     content: [
