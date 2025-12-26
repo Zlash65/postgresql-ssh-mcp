@@ -1,8 +1,3 @@
-/**
- * SQL Validator Tests
- * Comprehensive tests for read-only enforcement and SQL parsing
- */
-
 import { describe, it, expect } from 'vitest';
 import {
   validateReadOnlyStatement,
@@ -184,7 +179,28 @@ describe('validateReadOnlyStatement', () => {
     });
 
     it('blocks TRUNCATE', () => {
-      expect(() => validateReadOnlyStatement('TRUNCATE users')).toThrow(/Statement type not allowed/);
+      expect(() => validateReadOnlyStatement('TRUNCATE users')).toThrow(/TRUNCATE statements are not allowed/);
+    });
+  });
+
+  describe('blocked PostgreSQL-specific statements', () => {
+    it('blocks COPY', () => {
+      expect(() => validateReadOnlyStatement("COPY users TO '/tmp/users.csv'")).toThrow(/COPY statements are not allowed/);
+      expect(() => validateReadOnlyStatement('COPY users TO STDOUT')).toThrow(/COPY statements are not allowed/);
+    });
+
+    it('blocks LOCK TABLE', () => {
+      expect(() => validateReadOnlyStatement('LOCK TABLE users IN ACCESS EXCLUSIVE MODE')).toThrow(/LOCK statements are not allowed/);
+    });
+
+    it('blocks GRANT/REVOKE', () => {
+      expect(() => validateReadOnlyStatement('GRANT SELECT ON users TO public')).toThrow(/GRANT statements are not allowed/);
+      expect(() => validateReadOnlyStatement('REVOKE SELECT ON users FROM public')).toThrow(/REVOKE statements are not allowed/);
+    });
+
+    it('blocks PREPARE/EXECUTE', () => {
+      expect(() => validateReadOnlyStatement('PREPARE stmt AS DELETE FROM users')).toThrow(/PREPARE statements are not allowed/);
+      expect(() => validateReadOnlyStatement('EXECUTE stmt')).toThrow(/EXECUTE statements are not allowed/);
     });
   });
 

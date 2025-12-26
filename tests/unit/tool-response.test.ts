@@ -1,12 +1,6 @@
-/**
- * Tool Response Tests
- * Tests for MCP tool response helpers
- */
-
 import { describe, it, expect } from 'vitest';
 import {
   successResponse,
-  errorResponse,
   errorResponseFromError,
 } from '../../src/lib/tool-response.js';
 
@@ -14,6 +8,7 @@ describe('successResponse', () => {
   it('creates response without isError flag (success)', () => {
     const response = successResponse({ data: 'test' });
     expect(response.isError).toBeUndefined();
+    expect(response.structuredContent).toEqual({ result: { data: 'test' } });
   });
 
   it('serializes object data to JSON', () => {
@@ -21,35 +16,28 @@ describe('successResponse', () => {
     const response = successResponse(data);
     expect(response.content[0].type).toBe('text');
     expect(response.content[0].text).toBe(JSON.stringify(data, null, 2));
+    expect(response.structuredContent).toEqual({ result: data });
   });
 
   it('serializes array data to JSON', () => {
     const data = [1, 2, 3];
     const response = successResponse(data);
     expect(JSON.parse(response.content[0].text)).toEqual([1, 2, 3]);
+    expect(response.structuredContent).toEqual({ result: data });
   });
 
   it('returns strings as-is without JSON serialization', () => {
     expect(successResponse('hello').content[0].text).toBe('hello');
+    expect(successResponse('hello').structuredContent).toEqual({ result: 'hello' });
   });
 
   it('serializes non-string primitives to JSON', () => {
     expect(successResponse(42).content[0].text).toBe('42');
     expect(successResponse(true).content[0].text).toBe('true');
     expect(successResponse(null).content[0].text).toBe('null');
-  });
-});
-
-describe('errorResponse', () => {
-  it('creates response with isError true', () => {
-    const response = errorResponse('Something went wrong');
-    expect(response.isError).toBe(true);
-  });
-
-  it('includes error message with Error prefix', () => {
-    const response = errorResponse('Database connection failed');
-    expect(response.content[0].type).toBe('text');
-    expect(response.content[0].text).toBe('Error: Database connection failed');
+    expect(successResponse(42).structuredContent).toEqual({ result: 42 });
+    expect(successResponse(true).structuredContent).toEqual({ result: true });
+    expect(successResponse(null).structuredContent).toEqual({ result: null });
   });
 });
 
@@ -59,6 +47,7 @@ describe('errorResponseFromError', () => {
     const response = errorResponseFromError(error);
     expect(response.isError).toBe(true);
     expect(response.content[0].text).toBe('Error: Test error message');
+    expect(response.structuredContent).toBeUndefined();
   });
 
   it('converts string error to response', () => {

@@ -1,8 +1,3 @@
-/**
- * Host Key Verifier Tests
- * Tests known_hosts parsing and verification behavior
- */
-
 import { describe, it, expect, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';

@@ -1,8 +1,3 @@
-/**
- * Obfuscation Tests
- * Tests for credential obfuscation utilities
- */
-
 import { describe, it, expect } from 'vitest';
 import { obfuscateConnectionString } from '../../src/lib/obfuscate.js';
 
