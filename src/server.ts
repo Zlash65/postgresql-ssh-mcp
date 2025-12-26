@@ -3,6 +3,7 @@ import { ConnectionManager } from './connection/postgres-pool.js';
 import { registerQueryTools } from './tools/query.js';
 import { registerSchemaTools } from './tools/schema.js';
 import { registerAdminTools } from './tools/admin.js';
+import { VERSION } from './version.js';
 
 export interface ServerFactoryResponse {
   server: McpServer;
@@ -15,7 +16,7 @@ export function createServer(
   const server = new McpServer(
     {
       name: 'postgresql-ssh-mcp',
-      version: '1.0.0',
+      version: VERSION,
     },
     {
       capabilities: {
