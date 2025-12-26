@@ -1,7 +1,12 @@
 import type { Request, Response, NextFunction } from 'express';
 
 function normalizeOrigin(origin: string): string {
-  return origin.trim().replace(/\/+$/, '').toLowerCase();
+  const trimmed = origin.trim().toLowerCase();
+  let end = trimmed.length;
+  while (end > 0 && trimmed.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+  return end === trimmed.length ? trimmed : trimmed.slice(0, end);
 }
 
 export function parseAllowedOrigins(
