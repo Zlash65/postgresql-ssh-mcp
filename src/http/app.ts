@@ -188,7 +188,9 @@ export function createHttpApp(options: {
       } finally {
         try {
           await server.close();
-        } catch {}
+        } catch {
+          /* ignore close errors */
+        }
         serverPool.release(server);
       }
 
@@ -202,12 +204,12 @@ export function createHttpApp(options: {
       session = sessions.get(sessionId)!;
       session.lastAccess = Date.now();
     } else if (!sessionId && isInitializeRequest(req.body)) {
-      let createdSession: Session;
+      const sessionRef: { current?: Session } = {};
 
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (id: string) => {
-          sessions.set(id, createdSession);
+          sessions.set(id, sessionRef.current!);
         },
         onsessionclosed: (id: string) => {
           sessions.delete(id);
@@ -221,12 +223,12 @@ export function createHttpApp(options: {
       const { server } = createServer(connectionManager);
       await server.connect(transport);
 
-      createdSession = {
+      sessionRef.current = {
         transport,
         lastAccess: Date.now(),
       };
 
-      session = createdSession;
+      session = sessionRef.current;
     } else {
       const status = sessionId ? 404 : 400;
       jsonRpcError(
@@ -326,7 +328,9 @@ export function createHttpApp(options: {
             console.error(`[HTTP] Cleaning up expired session: ${sessionId}`);
             try {
               session.transport.close();
-            } catch {}
+            } catch {
+              /* ignore close errors */
+            }
             sessions.delete(sessionId);
             cleanedCount++;
           }
@@ -347,7 +351,9 @@ export function createHttpApp(options: {
     for (const session of sessions.values()) {
       try {
         await session.transport.close();
-      } catch {}
+      } catch {
+        /* ignore close errors */
+      }
     }
     sessions.clear();
 
@@ -405,7 +411,9 @@ function createServerPool(
         allServers.map(async (server) => {
           try {
             await server.close();
-          } catch {}
+          } catch {
+            /* ignore close errors */
+          }
         })
       );
     },
