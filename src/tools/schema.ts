@@ -1,7 +1,89 @@
 import { z } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { ConnectionManager } from '../connection/postgres-pool.js';
-import { successResponse, errorResponseFromError } from '../lib/tool-response.js';
+import {
+  successResponse,
+  errorResponseFromError,
+  wrapToolOutputSchema,
+} from '../lib/tool-response.js';
+
+const SchemaRowSchema = z
+  .object({
+    schema_name: z.string(),
+    schema_owner: z.string(),
+    schema_type: z.enum(['system', 'user']),
+  })
+  .passthrough();
+
+const TableRowSchema = z
+  .object({
+    table_name: z.string(),
+    table_type: z.string(),
+    estimated_row_count: z.union([z.number(), z.string()]),
+    total_size: z.string(),
+  })
+  .passthrough();
+
+const ColumnSchema = z
+  .object({
+    column_name: z.string(),
+    data_type: z.string(),
+    is_nullable: z.string(),
+    column_default: z.string().nullable(),
+    character_maximum_length: z.union([z.number(), z.string(), z.null()]),
+    numeric_precision: z.union([z.number(), z.string(), z.null()]),
+    numeric_scale: z.union([z.number(), z.string(), z.null()]),
+  })
+  .passthrough();
+
+const ConstraintSchema = z
+  .object({
+    name: z.string(),
+    type: z.string(),
+    columns: z.array(z.string()),
+    foreignTable: z.string().optional(),
+    foreignSchema: z.string().optional(),
+    foreignColumn: z.string().optional(),
+  })
+  .passthrough();
+
+const IndexSchema = z
+  .object({
+    indexname: z.string(),
+    indexdef: z.string(),
+  })
+  .passthrough();
+
+const DescribeTableResultSchema = z
+  .object({
+    table: z.object({
+      schema: z.string(),
+      name: z.string(),
+    }),
+    columns: z.array(ColumnSchema),
+    constraints: z.array(ConstraintSchema),
+    indexes: z.array(IndexSchema),
+  })
+  .passthrough();
+
+const DatabaseRowSchema = z
+  .object({
+    name: z.string(),
+    owner: z.string(),
+    encoding: z.string(),
+    collation: z.string(),
+    size: z.string(),
+  })
+  .passthrough();
+
+const ListSchemasOutputSchema = wrapToolOutputSchema(z.array(SchemaRowSchema));
+const ListTablesOutputSchema = wrapToolOutputSchema(z.array(TableRowSchema));
+const DescribeTableOutputSchema = wrapToolOutputSchema(
+  DescribeTableResultSchema
+);
+const ListDatabasesOutputSchema = wrapToolOutputSchema(
+  z.array(DatabaseRowSchema)
+);
 
 export function registerSchemaTools(
   server: McpServer,
@@ -18,6 +100,7 @@ export function registerSchemaTools(
           .default(false)
           .describe('Include system schemas (pg_*, information_schema)'),
       },
+      outputSchema: ListSchemasOutputSchema,
     },
     async ({ includeSystem }) => {
       try {
@@ -65,6 +148,7 @@ export function registerSchemaTools(
           .default(false)
           .describe('Include views in the listing'),
       },
+      outputSchema: ListTablesOutputSchema,
     },
     async ({ schema, includeViews }) => {
       try {
@@ -107,6 +191,7 @@ export function registerSchemaTools(
           .describe('Schema name (default: public)'),
         table: z.string().describe('Table name to describe'),
       },
+      outputSchema: DescribeTableOutputSchema,
     },
     async ({ schema, table }) => {
       try {
@@ -208,6 +293,7 @@ export function registerSchemaTools(
     {
       description: 'List databases with owner, encoding, and size.',
       inputSchema: {},
+      outputSchema: ListDatabasesOutputSchema,
     },
     async () => {
       try {

@@ -97,9 +97,7 @@ async function main(): Promise<void> {
 
         try {
           await connectionManager.close();
-        } catch {
-          // Ignore cleanup errors during retry
-        }
+        } catch {}
 
         attempts += 1;
         console.error(
@@ -122,9 +120,7 @@ async function main(): Promise<void> {
     if (cleanup) {
       try {
         await cleanup();
-      } catch {
-        // Ignore cleanup errors during fatal shutdown
-      }
+      } catch {}
     }
 
     process.exit(1);

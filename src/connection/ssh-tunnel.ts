@@ -17,7 +17,7 @@ export class SSHTunnelManager extends EventEmitter {
   private localPort: number = 0;
   private status: TunnelStatus = 'disconnected';
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
+  private maxReconnectAttempts: number;
   private startTime: number = 0;
   private lastError?: string;
   private hostKeyVerifier: HostKeyVerifier | null = null;
@@ -31,6 +31,7 @@ export class SSHTunnelManager extends EventEmitter {
     private target: TunnelTarget
   ) {
     super();
+    this.maxReconnectAttempts = config.maxReconnectAttempts;
 
     if (config.strictHostKey !== false) {
       this.hostKeyVerifier = new HostKeyVerifier(
@@ -53,8 +54,11 @@ export class SSHTunnelManager extends EventEmitter {
     this.isShuttingDown = false;
     this.setStatus('connecting');
 
+    let privateKey: Buffer | undefined;
     if (this.config.privateKeyPath) {
-      await this.validateKeyPermissions(this.config.privateKeyPath);
+      const keyPath = this.expandKeyPath(this.config.privateKeyPath);
+      await this.validateKeyPermissions(keyPath);
+      privateKey = await fs.promises.readFile(keyPath);
     }
 
     return new Promise((resolve, reject) => {
@@ -62,7 +66,7 @@ export class SSHTunnelManager extends EventEmitter {
       this.hostKeyVerified = false;
       this.hostKeyError = null;
 
-      const connectConfig = this.buildConnectConfig();
+      const connectConfig = this.buildConnectConfig(privateKey);
 
       if (this.hostKeyVerifier) {
         connectConfig.hostVerifier = (key: Buffer) => {
@@ -160,10 +164,8 @@ export class SSHTunnelManager extends EventEmitter {
   }
 
   private async validateKeyPermissions(keyPath: string): Promise<void> {
-    const expandedPath = keyPath.replace(/^~/, process.env.HOME || '');
-
     try {
-      const stats = fs.statSync(expandedPath);
+      const stats = await fs.promises.stat(keyPath);
       const mode = stats.mode & 0o777;
 
       if (mode & 0o077) {
@@ -259,7 +261,7 @@ export class SSHTunnelManager extends EventEmitter {
     );
   }
 
-  private buildConnectConfig(): ConnectConfig {
+  private buildConnectConfig(privateKey?: Buffer): ConnectConfig {
     const config: ConnectConfig = {
       host: this.config.host,
       port: this.config.port,
@@ -270,11 +272,10 @@ export class SSHTunnelManager extends EventEmitter {
     };
 
     if (this.config.privateKeyPath) {
-      const keyPath = this.config.privateKeyPath.replace(
-        /^~/,
-        process.env.HOME || ''
-      );
-      config.privateKey = fs.readFileSync(keyPath);
+      if (!privateKey) {
+        throw new Error('SSH private key missing');
+      }
+      config.privateKey = privateKey;
 
       if (this.config.privateKeyPassphrase) {
         config.passphrase = this.config.privateKeyPassphrase;
@@ -284,6 +285,10 @@ export class SSHTunnelManager extends EventEmitter {
     }
 
     return config;
+  }
+
+  private expandKeyPath(keyPath: string): string {
+    return keyPath.replace(/^~/, process.env.HOME || '');
   }
 
   private handleDisconnect(): void {
@@ -312,7 +317,10 @@ export class SSHTunnelManager extends EventEmitter {
       return;
     }
 
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+    if (
+      this.maxReconnectAttempts >= 0 &&
+      this.reconnectAttempts >= this.maxReconnectAttempts
+    ) {
       console.error('[SSH] Max reconnection attempts reached. Giving up.');
       this.setStatus('failed');
       this.emit('failed', new Error('Max reconnection attempts reached'));
@@ -324,11 +332,15 @@ export class SSHTunnelManager extends EventEmitter {
       30000
     );
     this.reconnectAttempts++;
+    const maxAttemptsLabel =
+      this.maxReconnectAttempts >= 0
+        ? this.maxReconnectAttempts.toString()
+        : 'unlimited';
 
     this.setStatus('reconnecting');
     console.error(
       `[SSH] Reconnecting in ${backoff}ms ` +
-        `(attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+        `(attempt ${this.reconnectAttempts}/${maxAttemptsLabel})`
     );
 
     await new Promise((r) => setTimeout(r, backoff));

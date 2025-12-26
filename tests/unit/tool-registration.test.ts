@@ -1,8 +1,3 @@
-/**
- * Tool Registration Tests
- * Ensures all expected tools are registered on the MCP server
- */
-
 import { describe, it, expect, vi } from 'vitest';
 import { createServer } from '../../src/server.js';
 import type { ConnectionManager } from '../../src/connection/postgres-pool.js';
@@ -35,5 +30,10 @@ describe('MCP tool registration', () => {
         'get_table_stats',
       ])
     );
+
+    const missingOutputSchema = toolNames.filter(
+      (name) => !toolRegistry[name]?.outputSchema
+    );
+    expect(missingOutputSchema).toEqual([]);
   });
 });

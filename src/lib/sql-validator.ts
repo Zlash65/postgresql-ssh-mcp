@@ -1,3 +1,13 @@
+const READ_ONLY_BLOCKED_KEYWORDS = new Set([
+  'COPY',
+  'TRUNCATE',
+  'LOCK',
+  'GRANT',
+  'REVOKE',
+  'PREPARE',
+  'EXECUTE',
+]);
+
 export function validateReadOnlyStatement(sql: string): void {
   if (containsMultipleStatements(sql)) {
     throw new Error(
@@ -11,6 +21,12 @@ export function validateReadOnlyStatement(sql: string): void {
 
   if (!firstKeyword) {
     throw new Error('Empty SQL statement.');
+  }
+
+  if (READ_ONLY_BLOCKED_KEYWORDS.has(firstKeyword)) {
+    throw new Error(
+      `${firstKeyword} statements are not allowed in read-only mode.`
+    );
   }
 
   if (firstKeyword === 'CALL') {
@@ -156,6 +172,12 @@ function validateExplainStatement(sql: string): void {
   }
 
   const innerStatement = remaining;
+  const innerKeyword = getFirstKeyword(innerStatement);
+  if (innerKeyword && READ_ONLY_BLOCKED_KEYWORDS.has(innerKeyword)) {
+    throw new Error(
+      `EXPLAIN of ${innerKeyword} not allowed in read-only mode.`
+    );
+  }
 
   if (hasAnalyze) {
     const normalizedInner = stripLeadingComments(innerStatement).trim().toUpperCase();

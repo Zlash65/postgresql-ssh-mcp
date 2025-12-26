@@ -1,28 +1,37 @@
-# PostgreSQL MCP Server (SSH Tunnel)
+# PostgreSQL SSH MCP Server
 
 [![npm version][npm-version-badge]][npm-package]
 [![npm downloads][npm-downloads-badge]][npm-package]
 [![license][license-badge]][license-link]
 
-Secure PostgreSQL MCP server with built-in SSH tunneling. Connect through bastion hosts automatically, no manual `ssh -L` required.
+A secure PostgreSQL MCP server with built-in SSH tunneling. Connect to databases through bastion hosts automatically — no manual `ssh -L` required.
 
-- Stdio transport for local MCP clients (Claude Desktop, VS Code, etc.)
-- Read-only by default (opt in to writes)
-- Pooled connections with safe defaults and query limits
+## Features
 
-## Quickstart (npx)
+- **Dual Transport** — STDIO for Claude Desktop, Streamable HTTP for ChatGPT
+- **SSH Tunneling** — Built-in tunnel with auto-reconnect and TOFU (trust on first use)
+- **Read-Only by Default** — Safe for production; enable writes explicitly
+- **OAuth Support** — Auth0 integration for secure ChatGPT connections
+- **Connection Pooling** — Efficient resource management with configurable limits
 
-This server runs as a local process that speaks MCP over stdio, so your MCP client should spawn it.
+---
 
-### Claude Desktop
+## Architecture
 
-Config file locations:
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%/Claude/claude_desktop_config.json` (some installs use `%APPDATA%/Claude/config.json`)
+![Architecture](assets/architecture.png)
 
-If you cannot find the file, open Claude Desktop > Settings > Developer > Edit Config.
+---
 
-Direct connection:
+## Quick Start
+
+### Claude Desktop (STDIO)
+
+Add to your Claude Desktop config:
+
+| Platform | Config Location |
+|----------|-----------------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%/Claude/claude_desktop_config.json` |
 
 ```json
 {
@@ -38,172 +47,173 @@ Direct connection:
 }
 ```
 
-With SSH tunnel:
-
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "npx",
-      "args": ["-y", "@zlash65/postgresql-ssh-mcp"],
-      "env": {
-        "DATABASE_URI": "postgresql://user:password@db.internal:5432/mydb",
-        "SSH_ENABLED": "true",
-        "SSH_HOST": "bastion.example.com",
-        "SSH_USER": "ubuntu",
-        "SSH_PRIVATE_KEY_PATH": "~/.ssh/id_rsa"
-      }
-    }
-  }
-}
-```
-
-### VS Code
-
-Add to your settings JSON or create `.vscode/mcp.json` in your workspace:
-
-```json
-{
-  "mcp": {
-    "servers": {
-      "postgres": {
-        "command": "npx",
-        "args": ["-y", "@zlash65/postgresql-ssh-mcp"],
-        "env": {
-          "DATABASE_URI": "postgresql://user:password@localhost:5432/mydb"
-        }
-      }
-    }
-  }
-}
-```
-
-Note: `env` values must be strings in JSON configs.
-Restart Claude Desktop after editing the config file.
-
-## Configuration
-
-Set environment variables directly or use a `.env` file. See `.env.example` for the full list.
-
-### Database connection
-
-Use a single connection string:
-
-```
-DATABASE_URI=postgresql://user:password@localhost:5432/mydb
-```
-
-Or individual variables: `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`, `DATABASE_PASSWORD`.
-
-### SSL/TLS
-
-`DATABASE_SSL=true` to force SSL, `DATABASE_SSL=false` to disable, or leave unset for auto-detection.
-
-Optional:
-- `DATABASE_SSL_CA=/path/to/ca.pem`
-- `DATABASE_SSL_REJECT_UNAUTHORIZED=false`
-
-### SSH tunnel
-
-```
-SSH_ENABLED=true
-SSH_HOST=bastion.example.com
-SSH_USER=ubuntu
-SSH_PRIVATE_KEY_PATH=~/.ssh/id_rsa
-```
-
-Optional:
-- `SSH_PORT` (default 22)
-- `SSH_PRIVATE_KEY_PASSPHRASE`
-- `SSH_PASSWORD`
-- `SSH_KEEPALIVE_INTERVAL` (ms, default 10000)
-- `SSH_KNOWN_HOSTS_PATH` (defaults to `~/.ssh/known_hosts`)
-- `SSH_TRUST_ON_FIRST_USE` (default `true`, auto-adds new hosts to `known_hosts`)
-- `SSH_STRICT_HOST_KEY=false` (disable verification, insecure)
-
-### Host key verification (first time UX)
-
-By default the server uses **trust-on-first-use**: the first time it sees a host, it will **accept and save** the key
-to `known_hosts` automatically. No manual `ssh-keyscan` step required.
-The server retries connections on startup, so you do not need to restart after the key is saved.
-
-If you want strict verification, set `SSH_TRUST_ON_FIRST_USE=false`. In that mode, using a domain name or IP in
-`SSH_HOST` requires it to already exist in `known_hosts`, or the server will fail.
-
-Add the host key manually:
+### ChatGPT (Streamable HTTP)
 
 ```bash
-ssh-keyscan -H bastion.example.com >> ~/.ssh/known_hosts
+DATABASE_URI="postgresql://user:pass@localhost:5432/mydb" npx @zlash65/postgresql-ssh-mcp-http
 ```
 
-For non-standard ports:
+Then configure ChatGPT to connect to `https://your-subdomain.example.com/mcp`.
 
-```bash
-ssh-keyscan -p 2222 -H bastion.example.com >> ~/.ssh/known_hosts
-```
+> **Note:** ChatGPT requires HTTPS. Use a tunnel (ngrok, Cloudflare Tunnel) for local testing.
 
-You can also point to a custom file with `SSH_KNOWN_HOSTS_PATH`. For local dev only, you may set
-`SSH_STRICT_HOST_KEY=false` to skip verification (not recommended for production).
+---
 
-### Server options
+## Available Tools
 
-```
-READ_ONLY=true       # default, blocks writes
-QUERY_TIMEOUT=30000  # ms
-MAX_ROWS=1000        # per query
-```
-
-## Tools
+### Query Tools
 
 | Tool | Description |
-| --- | --- |
-| execute_query | Run SQL queries with parameters (capped by `MAX_ROWS`) |
-| explain_query | Get the execution plan for a query |
-| list_schemas | List database schemas |
-| list_tables | List tables with row counts and sizes |
-| describe_table | Show columns, indexes, and constraints |
-| list_databases | List all databases on the server |
-| get_connection_status | Check pool and tunnel health |
-| get_database_version | PostgreSQL version string |
-| get_database_size | Database size and largest tables |
-| get_table_stats | Vacuum times, sequential scans, row estimates |
-| list_active_connections | Current sessions from `pg_stat_activity` |
-| list_long_running_queries | Queries exceeding a time threshold |
+|------|-------------|
+| `execute_query` | Execute SQL with parameterized queries. Results capped by `MAX_ROWS`. |
+| `explain_query` | Get EXPLAIN plans in text, JSON, YAML, or XML format. Supports ANALYZE. |
 
-Read-only mode is enabled by default. It blocks `INSERT`, `UPDATE`, `DELETE`, and DDL statements.
+### Schema Tools
+
+| Tool | Description |
+|------|-------------|
+| `list_schemas` | List database schemas. Excludes system schemas by default. |
+| `list_tables` | List tables with row counts and sizes. Optionally include views. |
+| `describe_table` | Get columns, constraints, and indexes for a table. |
+| `list_databases` | List all databases with owner, encoding, and size. |
+
+### Admin Tools
+
+| Tool | Description |
+|------|-------------|
+| `get_connection_status` | Get pool stats, tunnel state, and connection info. |
+| `list_active_connections` | Show active connections from `pg_stat_activity`. |
+| `list_long_running_queries` | Find queries running longer than a threshold. |
+| `get_database_version` | Get PostgreSQL server version. |
+| `get_database_size` | Get database size and largest tables. |
+| `get_table_stats` | Get vacuum/analyze stats and scan counts for a table. |
+
+---
+
+## Environment Variables
+
+### Database Connection
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `DATABASE_URI` | Yes* | — | Full connection string (e.g., `postgresql://user:pass@host:5432/db`) |
+| `DATABASE_HOST` | Yes* | — | Database hostname |
+| `DATABASE_PORT` | No | `5432` | Database port |
+| `DATABASE_NAME` | Yes* | — | Database name |
+| `DATABASE_USER` | Yes* | — | Database username |
+| `DATABASE_PASSWORD` | Yes* | — | Database password |
+
+*Either `DATABASE_URI` or all individual connection variables are required.
+
+### SSL Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DATABASE_SSL` | Auto | `true` or `false`. Auto-enabled for non-localhost. |
+| `DATABASE_SSL_CA` | — | Path to CA certificate bundle |
+| `DATABASE_SSL_REJECT_UNAUTHORIZED` | `true` | Set `false` to allow self-signed certificates |
+
+### SSH Tunnel
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `SSH_ENABLED` | No | `false` | Set `true` to enable SSH tunneling |
+| `SSH_HOST` | Yes* | — | SSH server hostname |
+| `SSH_PORT` | No | `22` | SSH server port |
+| `SSH_USER` | Yes* | — | SSH username |
+| `SSH_PRIVATE_KEY_PATH` | Yes** | — | Path to private key file |
+| `SSH_PRIVATE_KEY_PASSPHRASE` | No | — | Passphrase for encrypted keys |
+| `SSH_PASSWORD` | Yes** | — | SSH password (alternative to key) |
+| `SSH_STRICT_HOST_KEY` | No | `true` | Verify host key against known_hosts |
+| `SSH_TRUST_ON_FIRST_USE` | No | `true` | Auto-add unknown hosts (when strict is enabled) |
+| `SSH_KNOWN_HOSTS_PATH` | No | `~/.ssh/known_hosts` | Custom known_hosts file |
+| `SSH_KEEPALIVE_INTERVAL` | No | `10000` | Keepalive interval in milliseconds |
+| `SSH_MAX_RECONNECT_ATTEMPTS` | No | `5` | Max reconnect attempts (`-1` for unlimited) |
+
+*Required when `SSH_ENABLED=true`
+**Either `SSH_PRIVATE_KEY_PATH` or `SSH_PASSWORD` is required
+
+### Query Behavior
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `READ_ONLY` | `true` | Block data modifications. Set `false` to allow writes. |
+| `MAX_ROWS` | `1000` | Maximum rows returned per query |
+| `QUERY_TIMEOUT` | `30000` | Query timeout in milliseconds |
+| `MAX_CONCURRENT_QUERIES` | `10` | Maximum concurrent queries |
+| `POOL_DRAIN_TIMEOUT_MS` | `5000` | Timeout for draining pool during reconnect |
+
+### HTTP Server (Streamable HTTP only)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | HTTP server port |
+| `MCP_HOST` | `0.0.0.0` | HTTP server bind address |
+| `MCP_AUTH_MODE` | `none` | Authentication mode: `none` or `oauth` |
+| `MCP_STATELESS` | `true` | Stateless mode (each request re-initializes) |
+| `MCP_SERVER_POOL_SIZE` | `4` | Server instances for stateless mode |
+| `MCP_SESSION_TTL_MINUTES` | `30` | Session TTL for stateful mode |
+| `MCP_SESSION_CLEANUP_INTERVAL_MS` | `300000` | Session cleanup interval |
+| `MCP_ALLOWED_ORIGINS` | — | Comma-separated allowed CORS origins (`*` for any) |
+| `MCP_ALLOWED_HOSTS` | — | Comma-separated allowed Host headers |
+
+### OAuth (Auth0)
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AUTH0_DOMAIN` | Yes* | Auth0 tenant domain (e.g., `tenant.us.auth0.com`) |
+| `AUTH0_AUDIENCE` | Yes* | Auth0 API identifier / audience |
+| `MCP_RESOURCE_DOCUMENTATION` | No | URL to API documentation (RFC 9728) |
+
+*Required when `MCP_AUTH_MODE=oauth`
+
+---
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [STDIO Setup](docs/stdio-setup.md) | Claude Desktop and local development |
+| [Streamable HTTP](docs/streamable-http.md) | HTTP server setup and configuration |
+| [Server Setup](docs/server-setup.md) | Deploy to production with nginx and SSL |
+| [ChatGPT Setup](docs/chatgpt-setup.md) | Complete Auth0 OAuth setup for ChatGPT |
+
+---
 
 ## Docker
 
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "docker",
-      "args": ["run", "-i", "--rm", "-e", "DATABASE_URI", "postgresql-ssh-mcp"],
-      "env": {
-        "DATABASE_URI": "postgresql://user:password@host.docker.internal:5432/mydb"
-      }
-    }
-  }
-}
-```
-
-Use `host.docker.internal` instead of `localhost` to reach the host machine.
-
-## Building
+### STDIO Server
 
 ```bash
-npm install
-npm run build
+docker build --target runtime -t postgresql-mcp .
+docker run -e DATABASE_URI="postgresql://..." postgresql-mcp
 ```
+
+### HTTP Server
+
+```bash
+docker build --target runtime-http -t postgresql-mcp-http .
+docker run -p 3000:3000 -e DATABASE_URI="postgresql://..." postgresql-mcp-http
+```
+
+---
 
 ## Development
 
 ```bash
-npm test              # all tests
-npm run test:unit     # unit tests only
-npm run test:docker   # full integration with SSH
+# Install dependencies
+npm install
 
+# Build
+npm run build
+
+# Run tests
+npm test
+
+# Type check
+npm run typecheck
+
+# Lint
 npm run lint
 ```
 
