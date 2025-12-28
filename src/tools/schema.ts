@@ -258,13 +258,29 @@ export function registerSchemaTools(
         for (const row of constraintsResult.rows) {
           const name = row.constraint_name as string;
           if (!constraints[name]) {
-            constraints[name] = {
+            const constraintData: {
+              type: string;
+              columns: string[];
+              foreignTable?: string;
+              foreignSchema?: string;
+              foreignColumn?: string;
+            } = {
               type: row.constraint_type as string,
               columns: [],
-              foreignTable: row.foreign_table as string | undefined,
-              foreignSchema: row.foreign_table_schema as string | undefined,
-              foreignColumn: row.foreign_column as string | undefined,
             };
+
+            // Only include foreign key fields when they have non-null values
+            if (row.foreign_table !== null) {
+              constraintData.foreignTable = row.foreign_table as string;
+            }
+            if (row.foreign_table_schema !== null) {
+              constraintData.foreignSchema = row.foreign_table_schema as string;
+            }
+            if (row.foreign_column !== null) {
+              constraintData.foreignColumn = row.foreign_column as string;
+            }
+
+            constraints[name] = constraintData;
           }
           if (row.column_name) {
             constraints[name].columns.push(row.column_name as string);
