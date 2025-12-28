@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/Zlash65/postgresql-ssh-mcp/compare/v1.2.0...v1.2.1) (2025-12-28)
+
+### Bug Fixes
+
+* describe tool validation error ([#5](https://github.com/Zlash65/postgresql-ssh-mcp/issues/5)) ([61a88a7](https://github.com/Zlash65/postgresql-ssh-mcp/commit/61a88a73578c296e294b6edc52822c192dbf5cd0))
+
 ## [1.2.0](https://github.com/Zlash65/postgresql-ssh-mcp/compare/v1.1.0...v1.2.0) (2025-12-26)
 
 ### Features
