@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/zlash65-postgresql-ssh-mcp-badge.png)](https://mseep.ai/app/zlash65-postgresql-ssh-mcp)
+
 # PostgreSQL SSH MCP Server
 
 [![npm version][npm-version-badge]][npm-package]
